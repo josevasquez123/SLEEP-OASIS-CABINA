@@ -57,38 +57,30 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define LUZ_TECHO_A2_Pin GPIO_PIN_2
-#define LUZ_TECHO_A2_GPIO_Port GPIOA
-#define LUZ_CABECERA_A3_Pin GPIO_PIN_3
-#define LUZ_CABECERA_A3_GPIO_Port GPIOA
-#define LUZ_MESA_A4_Pin GPIO_PIN_4
-#define LUZ_MESA_A4_GPIO_Port GPIOA
-#define LUZ_TECHO_Pin GPIO_PIN_5
-#define LUZ_TECHO_GPIO_Port GPIOA
-#define LUZ_CABECERA_Pin GPIO_PIN_6
-#define LUZ_CABECERA_GPIO_Port GPIOA
-#define CANTONERA_Pin GPIO_PIN_7
-#define CANTONERA_GPIO_Port GPIOA
-#define LUZ_NCABINA_Pin GPIO_PIN_0
-#define LUZ_NCABINA_GPIO_Port GPIOB
-#define LUZ_MESA_Pin GPIO_PIN_1
-#define LUZ_MESA_GPIO_Port GPIOB
-#define PUERTA_INT_Pin GPIO_PIN_3
-#define PUERTA_INT_GPIO_Port GPIOB
-#define PUERTA_INT_EXTI_IRQn EXTI3_IRQn
-#define PANIC_INT_Pin GPIO_PIN_4
-#define PANIC_INT_GPIO_Port GPIOB
-#define PANIC_INT_EXTI_IRQn EXTI4_IRQn
+#define I_CABECERA_Pin GPIO_PIN_1
+#define I_CABECERA_GPIO_Port GPIOA
+#define I_MESA_Pin GPIO_PIN_2
+#define I_MESA_GPIO_Port GPIOA
+#define ID_CAN_1_Pin GPIO_PIN_3
+#define ID_CAN_1_GPIO_Port GPIOA
+#define ID_CAN_2_Pin GPIO_PIN_4
+#define ID_CAN_2_GPIO_Port GPIOA
 #define ID_CAN_3_Pin GPIO_PIN_5
-#define ID_CAN_3_GPIO_Port GPIOB
+#define ID_CAN_3_GPIO_Port GPIOA
 #define ID_CAN_4_Pin GPIO_PIN_6
-#define ID_CAN_4_GPIO_Port GPIOB
+#define ID_CAN_4_GPIO_Port GPIOA
 #define ID_CAN_5_Pin GPIO_PIN_7
-#define ID_CAN_5_GPIO_Port GPIOB
-#define ID_CAN_2_Pin GPIO_PIN_8
-#define ID_CAN_2_GPIO_Port GPIOB
-#define ID_CAN_1_Pin GPIO_PIN_9
-#define ID_CAN_1_GPIO_Port GPIOB
+#define ID_CAN_5_GPIO_Port GPIOA
+#define I_TECHO_Pin GPIO_PIN_15
+#define I_TECHO_GPIO_Port GPIOA
+#define TECHO_Pin GPIO_PIN_3
+#define TECHO_GPIO_Port GPIOB
+#define CABECERA_Pin GPIO_PIN_5
+#define CABECERA_GPIO_Port GPIOB
+#define MESA_Pin GPIO_PIN_7
+#define MESA_GPIO_Port GPIOB
+#define LETRERO_Pin GPIO_PIN_9
+#define LETRERO_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

@@ -31,7 +31,7 @@ typedef enum { false, true } bool;
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define N_SAMPLES 20
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -40,36 +40,29 @@ typedef enum { false, true } bool;
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef hadc1;
-
 CAN_HandleTypeDef hcan;
 
 /* USER CODE BEGIN PV */
-uint32_t previousMillis = 0;
-uint32_t currentMillis = 0;
 
-uint8_t can_id = 0x03;								//CAN ID
+uint8_t can_id=0;								//CAN ID
 
 CAN_TxHeaderTypeDef TxHeader;
 CAN_RxHeaderTypeDef RxHeader;
 uint32_t TxMailBox;
 uint8_t RxData[8];
+uint8_t TxData[8];
 
-ADC_ChannelConfTypeDef sConfig;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_ADC1_Init(void);
 static void MX_CAN_Init(void);
 /* USER CODE BEGIN PFP */
 void init_can_id(void);
-float fmap(float x, float in_min, float in_max, float out_min, float out_max);
-float average(uint32_t channel);
-bool led_status(uint32_t channel);
-void activar(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, uint32_t channel);
-void desactivar(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, uint32_t channel);
+void send_ack(void);
+void activar(GPIO_TypeDef *GPIO_I_Port, uint16_t GPIO_I_Pin, GPIO_TypeDef *GPIO_O_Port, uint16_t GPIO_O_Pin);
+void desactivar(GPIO_TypeDef *GPIO_I_Port, uint16_t GPIO_I_Pin, GPIO_TypeDef *GPIO_O_Port, uint16_t GPIO_O_Pin);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -79,124 +72,104 @@ void desactivar(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, uint32_t channel);
  * TOPICOS MQTT
  */
 
+/*
+ * ADC CHANNELS
+ * LUZ CABECERA ANALOG = CHANNEL 7
+ * LUZ MESA ANALOG = CHANNEL 8
+ * LUZ TECHO ANALOG = CHANNEL 9
+ */
+
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan){
 	HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData);
 
+	//send_ack();			//ENVIANDO MENSAJE AL MB CONFIRMANDO QUE LLEGO EL MENSAJE OK
+
 	/*
-	 * CHECK-IN: PRENDE LUZ TECHO Y LUZ DE NUMERO DE CABINA
+	 * INGRESO: PRENDE LUZ TECHO Y LUZ DE NUMERO DE CABINA
 	 */
 	if(RxData[1] == 0x01){
-		if(RxData[0]==0x01){					//PRENDER
-			activar(LUZ_TECHO_GPIO_Port, LUZ_TECHO_Pin, ADC_CHANNEL_2);
-			desactivar(LUZ_MESA_GPIO_Port, LUZ_MESA_Pin, ADC_CHANNEL_4);
-			activar(LUZ_CABECERA_GPIO_Port, LUZ_CABECERA_Pin, ADC_CHANNEL_3);
-			HAL_GPIO_WritePin(LUZ_NCABINA_GPIO_Port, LUZ_NCABINA_Pin, GPIO_PIN_SET);
+		if(RxData[0]==0x01){
+			activar(I_TECHO_GPIO_Port, I_TECHO_Pin, TECHO_GPIO_Port, TECHO_Pin);
+			desactivar(I_MESA_GPIO_Port, I_MESA_Pin, MESA_GPIO_Port, MESA_Pin);
+			desactivar(I_CABECERA_GPIO_Port, I_CABECERA_Pin, CABECERA_GPIO_Port, CABECERA_Pin);
+			HAL_GPIO_WritePin(LETRERO_GPIO_Port, LETRERO_Pin, GPIO_PIN_SET);
 		}
+
+		send_ack();
 	}
 
 	/*
-	 * STAND-BY: ESTADO DE ESPERA HASTA QUE ENTRE UN CLIENTE
+	 * APAGADO: APAGAR TODA LAS LUCES
 	 */
 	else if(RxData[1] == 0x02){
 		if(RxData[0]==0x01){
-			desactivar(LUZ_TECHO_GPIO_Port, LUZ_TECHO_Pin, ADC_CHANNEL_2);
-			desactivar(LUZ_MESA_GPIO_Port, LUZ_MESA_Pin, ADC_CHANNEL_4);
-			activar(LUZ_CABECERA_GPIO_Port, LUZ_CABECERA_Pin, ADC_CHANNEL_3);
-			HAL_GPIO_WritePin(LUZ_NCABINA_GPIO_Port, LUZ_NCABINA_Pin, GPIO_PIN_RESET);
+			desactivar(I_TECHO_GPIO_Port, I_TECHO_Pin, TECHO_GPIO_Port, TECHO_Pin);
+			desactivar(I_MESA_GPIO_Port, I_MESA_Pin, MESA_GPIO_Port, MESA_Pin);
+			desactivar(I_CABECERA_GPIO_Port, I_CABECERA_Pin, CABECERA_GPIO_Port, CABECERA_Pin);
+			HAL_GPIO_WritePin(LETRERO_GPIO_Port, LETRERO_Pin, GPIO_PIN_RESET);
 		}
+
+		send_ack();
 	}
 
-	/*
-	 * REINGRESO: CUANDO UNA PERSONA SE VA AL BAÑO Y CIERRA SU PUERTA, CUANDO VUELVE
-	 * REINGRESA DENUEVO Y SE LE ABRE LA PUERTA DE SU CABINA
-	 */
-	else if(RxData[1] == 0x03){
-		if(RxData[0]==0x01){
-			HAL_GPIO_WritePin(CANTONERA_GPIO_Port, CANTONERA_Pin, GPIO_PIN_SET);
-		}
-	}
-
-	/*
-	 * PUERTA: MANERA MANUAL DE ABRIR O CERRAR LA CANTONERA DE LA PUERTA
-	 */
-	else if(RxData[1] == 0x04){
-		if(RxData[0]==0x01){
-			HAL_GPIO_WritePin(CANTONERA_GPIO_Port, CANTONERA_Pin, GPIO_PIN_SET);
-		}
-		else if(RxData[0]==0x00){
-			HAL_GPIO_WritePin(CANTONERA_GPIO_Port, CANTONERA_Pin, GPIO_PIN_RESET);
-		}
-	}
 
 	/*
 	 * LUZ-TECHO: MANERA MANUAL DE PRENDER Y APAGAR LA LUZ DEL TECHO
 	 */
-	else if(RxData[1] == 0x05){
+	else if(RxData[1] == 0x04){
 		if(RxData[0]==0x01){
-			activar(LUZ_TECHO_GPIO_Port, LUZ_TECHO_Pin, ADC_CHANNEL_2);
+			activar(I_TECHO_GPIO_Port, I_TECHO_Pin, TECHO_GPIO_Port, TECHO_Pin);
 		}
 		else if(RxData[0]==0x00){
-			desactivar(LUZ_TECHO_GPIO_Port, LUZ_TECHO_Pin, ADC_CHANNEL_2);
+			desactivar(I_TECHO_GPIO_Port, I_TECHO_Pin, TECHO_GPIO_Port, TECHO_Pin);
 		}
+
+		send_ack();
 	}
 
 	/*
 	 * LUZ-CABECERA: MANERA MANUAL DE PRENDER Y APAGAR LA LUZ DE LA CABECERA
 	 */
-	else if(RxData[1] == 0x06){
+	else if(RxData[1] == 0x05){
 		if(RxData[0]==0x01){
-			activar(LUZ_CABECERA_GPIO_Port, LUZ_CABECERA_Pin, ADC_CHANNEL_3);
+			activar(I_CABECERA_GPIO_Port, I_CABECERA_Pin, CABECERA_GPIO_Port, CABECERA_Pin);
 		}
 		else if(RxData[0]==0x00){
-			desactivar(LUZ_CABECERA_GPIO_Port, LUZ_CABECERA_Pin, ADC_CHANNEL_3);
+			desactivar(I_CABECERA_GPIO_Port, I_CABECERA_Pin, CABECERA_GPIO_Port, CABECERA_Pin);
 		}
+
+		send_ack();
 	}
 
 	/*
 	 * LUZ-MESA: MANERA MANUAL DE PRENDER Y APAGAR LA LUZ DE LA MESA
 	 */
-	else if(RxData[1] == 0x07){
+	else if(RxData[1] == 0x06){
 		if(RxData[0]==0x01){
-			activar(LUZ_MESA_GPIO_Port, LUZ_MESA_Pin, ADC_CHANNEL_4);
+			activar(I_MESA_GPIO_Port, I_MESA_Pin, MESA_GPIO_Port, MESA_Pin);
 		}
 		else if(RxData[0]==0x00){
-			desactivar(LUZ_MESA_GPIO_Port, LUZ_MESA_Pin, ADC_CHANNEL_4);
+			desactivar(I_MESA_GPIO_Port, I_MESA_Pin, MESA_GPIO_Port, MESA_Pin);
 		}
+
+		send_ack();
 	}
 
 	/*
 	 * LUZ-NCABINA: MANERA MANUAL DE PRENDER Y APAGAR LA LUZ DEL INDICADOR DEL NUMERO DE CABINA
 	 */
-	else if(RxData[1] == 0x08){
+	else if(RxData[1] == 0x07){
 		if(RxData[0]==0x01){
-			HAL_GPIO_WritePin(LUZ_NCABINA_GPIO_Port, LUZ_NCABINA_Pin, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(LETRERO_GPIO_Port, LETRERO_Pin, GPIO_PIN_SET);
 		}
 		else if(RxData[0]==0x00){
-			HAL_GPIO_WritePin(LUZ_NCABINA_GPIO_Port, LUZ_NCABINA_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(LETRERO_GPIO_Port, LETRERO_Pin, GPIO_PIN_RESET);
 		}
+
+		send_ack();
 	}
 }
 
-/*
- * BOTON PANICO EXT INT
- */
-
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
-	currentMillis = HAL_GetTick();
-
-	if(GPIO_Pin == PUERTA_INT_Pin && (currentMillis - previousMillis > 500)){
-		uint8_t TxData[2] = {0x09, can_id};			//{BOTON_PANICO, ID CABINA}
-		TxHeader.DLC = 2;
-		TxHeader.ExtId = 0;
-		TxHeader.IDE = CAN_ID_STD;
-		TxHeader.RTR = CAN_RTR_DATA;
-		TxHeader.StdId = 0x19;						//ID DEL MB -> 25 = 0x19
-		TxHeader.TransmitGlobalTime = DISABLE;
-
-		HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailBox);
-		previousMillis = currentMillis;
-	}
-}
 /* USER CODE END 0 */
 
 /**
@@ -227,13 +200,11 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_ADC1_Init();
   MX_CAN_Init();
   /* USER CODE BEGIN 2 */
-  //init_can_id();
+  init_can_id();
   MX_CAN_Init();
 
-  HAL_ADC_Start(&hadc1);
   HAL_CAN_Start(&hcan);
   HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
 
@@ -259,14 +230,13 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
+  RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV2;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
@@ -289,59 +259,6 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
-  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
-  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
-
-/**
-  * @brief ADC1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_ADC1_Init(void)
-{
-
-  /* USER CODE BEGIN ADC1_Init 0 */
-
-  /* USER CODE END ADC1_Init 0 */
-
-  ADC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN ADC1_Init 1 */
-
-  /* USER CODE END ADC1_Init 1 */
-
-  /** Common config
-  */
-  hadc1.Instance = ADC1;
-  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc1.Init.ContinuousConvMode = ENABLE;
-  hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.NbrOfConversion = 1;
-  if (HAL_ADC_Init(&hadc1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** Configure Regular Channel
-  */
-  sConfig.Channel = ADC_CHANNEL_2;
-  sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_239CYCLES_5;
-  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN ADC1_Init 2 */
-
-  /* USER CODE END ADC1_Init 2 */
-
 }
 
 /**
@@ -360,11 +277,11 @@ static void MX_CAN_Init(void)
 
   /* USER CODE END CAN_Init 1 */
   hcan.Instance = CAN1;
-  hcan.Init.Prescaler = 9;
+  hcan.Init.Prescaler = 16;
   hcan.Init.Mode = CAN_MODE_NORMAL;
   hcan.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan.Init.TimeSeg1 = CAN_BS1_2TQ;
-  hcan.Init.TimeSeg2 = CAN_BS2_5TQ;
+  hcan.Init.TimeSeg1 = CAN_BS1_16TQ;
+  hcan.Init.TimeSeg2 = CAN_BS2_1TQ;
   hcan.Init.TimeTriggeredMode = DISABLE;
   hcan.Init.AutoBusOff = DISABLE;
   hcan.Init.AutoWakeUp = DISABLE;
@@ -412,45 +329,28 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, LUZ_TECHO_Pin|LUZ_CABECERA_Pin|CANTONERA_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, TECHO_Pin|CABECERA_Pin|MESA_Pin|LETRERO_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, LUZ_NCABINA_Pin|LUZ_MESA_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pins : LUZ_TECHO_Pin LUZ_CABECERA_Pin CANTONERA_Pin */
-  GPIO_InitStruct.Pin = LUZ_TECHO_Pin|LUZ_CABECERA_Pin|CANTONERA_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  /*Configure GPIO pins : I_CABECERA_Pin I_MESA_Pin I_TECHO_Pin */
+  GPIO_InitStruct.Pin = I_CABECERA_Pin|I_MESA_Pin|I_TECHO_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LUZ_NCABINA_Pin LUZ_MESA_Pin */
-  GPIO_InitStruct.Pin = LUZ_NCABINA_Pin|LUZ_MESA_Pin;
+  /*Configure GPIO pins : ID_CAN_1_Pin ID_CAN_2_Pin ID_CAN_3_Pin ID_CAN_4_Pin
+                           ID_CAN_5_Pin */
+  GPIO_InitStruct.Pin = ID_CAN_1_Pin|ID_CAN_2_Pin|ID_CAN_3_Pin|ID_CAN_4_Pin
+                          |ID_CAN_5_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : TECHO_Pin CABECERA_Pin MESA_Pin LETRERO_Pin */
+  GPIO_InitStruct.Pin = TECHO_Pin|CABECERA_Pin|MESA_Pin|LETRERO_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PUERTA_INT_Pin PANIC_INT_Pin */
-  GPIO_InitStruct.Pin = PUERTA_INT_Pin|PANIC_INT_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : ID_CAN_3_Pin ID_CAN_4_Pin ID_CAN_5_Pin ID_CAN_2_Pin
-                           ID_CAN_1_Pin */
-  GPIO_InitStruct.Pin = ID_CAN_3_Pin|ID_CAN_4_Pin|ID_CAN_5_Pin|ID_CAN_2_Pin
-                          |ID_CAN_1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI3_IRQn, 1, 0);
-  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
-
-  HAL_NVIC_SetPriority(EXTI4_IRQn, 1, 0);
-  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -458,21 +358,37 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+/*
+ * MENSAJE ACK AL MOTHERBOARD
+ */
 
+void send_ack(void){
+	TxHeader.DLC = 2;
+	TxHeader.ExtId = 0;
+	TxHeader.IDE = CAN_ID_STD;
+	TxHeader.RTR = CAN_RTR_DATA;
+	TxHeader.StdId = 0x1B;							//MB ID_CAN
+	TxHeader.TransmitGlobalTime = DISABLE;
+
+	TxData[0] = 0x09;
+	TxData[1] = can_id;
+
+	HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailBox);
+}
 
 /*
  * PRENDER LA LUZ
  */
 
-void activar(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, uint32_t channel){
-	if (led_status(channel)) return;
+void activar(GPIO_TypeDef *GPIO_I_Port, uint16_t GPIO_I_Pin, GPIO_TypeDef *GPIO_O_Port, uint16_t GPIO_O_Pin){
+	if (HAL_GPIO_ReadPin(GPIO_I_Port, GPIO_I_Pin)) return;
 	else{
-		while(!led_status(channel)){
-			HAL_GPIO_WritePin(GPIOx, GPIO_Pin, GPIO_PIN_SET);
-			if (led_status(channel)) return;
-			HAL_GPIO_WritePin(GPIOx, GPIO_Pin, GPIO_PIN_RESET);
-			if (led_status(channel)) return;
-		}
+		HAL_GPIO_WritePin(GPIO_O_Port, GPIO_O_Pin, GPIO_PIN_SET);
+		HAL_Delay(10);
+		if (HAL_GPIO_ReadPin(GPIO_I_Port, GPIO_I_Pin)) return;
+		HAL_GPIO_WritePin(GPIO_O_Port, GPIO_O_Pin, GPIO_PIN_RESET);
+		HAL_Delay(10);
+		if (HAL_GPIO_ReadPin(GPIO_I_Port, GPIO_I_Pin)) return;
 	}
 }
 
@@ -480,62 +396,18 @@ void activar(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, uint32_t channel){
  * APAGAR LA LUZ
  */
 
-void desactivar(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, uint32_t channel){
-	if (!led_status(channel)) return;
+void desactivar(GPIO_TypeDef *GPIO_I_Port, uint16_t GPIO_I_Pin, GPIO_TypeDef *GPIO_O_Port, uint16_t GPIO_O_Pin){
+	if (!HAL_GPIO_ReadPin(GPIO_I_Port, GPIO_I_Pin)) return;
 	else{
-		while(led_status(channel)){
-			HAL_GPIO_WritePin(GPIOx, GPIO_Pin, GPIO_PIN_SET);
-			if (!led_status(channel)) return;
-			HAL_GPIO_WritePin(GPIOx, GPIO_Pin, GPIO_PIN_RESET);
-			if (!led_status(channel)) return;
-		}
+		HAL_GPIO_WritePin(GPIO_O_Port, GPIO_O_Pin, GPIO_PIN_SET);
+		HAL_Delay(10);
+		if (!HAL_GPIO_ReadPin(GPIO_I_Port, GPIO_I_Pin)) return;
+		HAL_GPIO_WritePin(GPIO_O_Port, GPIO_O_Pin, GPIO_PIN_RESET);
+		HAL_Delay(10);
+		if (!HAL_GPIO_ReadPin(GPIO_I_Port, GPIO_I_Pin)) return;
 	}
 }
 
-/*
- * VER EL ESTADO DE LA LUZ, SI ESTA APAGADO O PRENDIDO
- */
-
-bool led_status(uint32_t channel){
-  float voltage_led = average(channel);
-  if(voltage_led > 20.0){
-    return true;
-  }
-  else{
-    return false;
-  }
-}
-
-/*
- * AVERAGE DE LA LECTURA DEL ADC PARA LAS LUCES
- */
-
-float average(uint32_t channel)
-{
-  float sum = 0 ;
-  for (int i = 0 ; i < N_SAMPLES ; i++){
-	sConfig.Channel = channel;
-	sConfig.Rank = ADC_REGULAR_RANK_1;
-	sConfig.SamplingTime = ADC_SAMPLETIME_239CYCLES_5;
-	HAL_ADC_ConfigChannel(&hadc1, &sConfig);
-	HAL_ADC_Start(&hadc1);
-	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
-	int analogVal = HAL_ADC_GetValue(&hadc1);
-    float voltage = fmap(analogVal, 0, 4096, 0.0, 25.0);
-    sum += voltage;
-    HAL_Delay(10);
-  }
-  return sum / N_SAMPLES;
-}
-
-/*
- *  FORMULA QUE PASA DE 0 - 25V A 0 - 3.3V
- */
-
-float fmap(float x, float in_min, float in_max, float out_min, float out_max)
-{
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
 
 /*
  * INICIALIZACION DEL CAN ID
